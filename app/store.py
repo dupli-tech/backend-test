@@ -5,7 +5,14 @@ from app.models import Customer, CustomerCreate, CustomerUpdate
 _db: dict[str, Customer] = {}
 
 
+class DuplicateDocumentError(Exception):
+    pass
+
+
 def create_customer(data: CustomerCreate) -> Customer:
+    for existing in _db.values():
+        if existing.document == data.document:
+            raise DuplicateDocumentError(data.document)
     customer = Customer(id=str(uuid.uuid4()), **data.model_dump())
     _db[customer.id] = customer
     return customer

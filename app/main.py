@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 
 from app.models import Customer, CustomerCreate, CustomerUpdate
 from app.store import (
+    DuplicateDocumentError,
     create_customer,
     delete_customer,
     get_customer,
@@ -19,7 +20,10 @@ def health() -> dict[str, str]:
 
 @app.post("/customers", status_code=201)
 def create(data: CustomerCreate) -> Customer:
-    return create_customer(data)
+    try:
+        return create_customer(data)
+    except DuplicateDocumentError:
+        raise HTTPException(status_code=409, detail="Document already exists")
 
 
 @app.get("/customers")
