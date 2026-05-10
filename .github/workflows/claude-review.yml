@@ -65,23 +65,19 @@ jobs:
 
       - name: Selecionar OAuth token
         id: route
+        env:
+          HANDLE_LUCA: ${{ vars.HANDLE_LUCA }}
+          HANDLE_SOCIO: ${{ vars.HANDLE_SOCIO }}
+          PR_AUTHOR: ${{ steps.author.outputs.pr_author }}
+          PR_NUM: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
-          case "${{ steps.author.outputs.pr_author }}" in
-            ${{ vars.HANDLE_LUCA }})
-              echo "owner=luca" >> $GITHUB_OUTPUT
-              ;;
-            ${{ vars.HANDLE_SOCIO }})
-              echo "owner=socio" >> $GITHUB_OUTPUT
-              ;;
-            *)
-              PR_NUM="${{ github.event.pull_request.number || github.event.issue.number }}"
-              if [ $((PR_NUM % 2)) -eq 0 ]; then
-                echo "owner=luca" >> $GITHUB_OUTPUT
-              else
-                echo "owner=socio" >> $GITHUB_OUTPUT
-              fi
-              ;;
-          esac
+          if [ "$PR_AUTHOR" = "$HANDLE_LUCA" ]; then
+            echo "owner=luca" >> $GITHUB_OUTPUT
+          elif [ -n "$HANDLE_SOCIO" ] && [ "$PR_AUTHOR" = "$HANDLE_SOCIO" ]; then
+            echo "owner=socio" >> $GITHUB_OUTPUT
+          else
+            echo "owner=luca" >> $GITHUB_OUTPUT
+          fi
 
       - name: Checkout
         uses: actions/checkout@v4
