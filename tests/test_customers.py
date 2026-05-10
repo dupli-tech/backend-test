@@ -214,3 +214,29 @@ def test_list_customers_invalid_limit_zero():
 def test_list_customers_invalid_limit_over_100():
     r = client.get("/customers?limit=101")
     assert r.status_code == 422
+
+
+def test_health_unchanged():
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
+
+
+def test_health_details():
+    r = client.get("/health/details")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "ok"
+    assert data["version"] == "0.1.0"
+    assert isinstance(data["uptime_seconds"], (int, float))
+    assert data["uptime_seconds"] >= 0
+    assert "timestamp" in data
+
+
+def test_health_details_timestamp_format():
+    from datetime import datetime
+
+    r = client.get("/health/details")
+    data = r.json()
+    # Should be valid ISO 8601
+    datetime.fromisoformat(data["timestamp"])
