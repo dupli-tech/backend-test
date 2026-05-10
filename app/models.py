@@ -1,6 +1,16 @@
 import re
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel, field_validator
+
+T = TypeVar("T")
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    items: list[T]
+    total: int
+    offset: int
+    limit: int
 
 _DOCUMENT_RE = re.compile(r"^\d{11}$|^\d{14}$")
 

@@ -36,7 +36,11 @@ def test_list_customers():
     })
     r = client.get("/customers")
     assert r.status_code == 200
-    assert len(r.json()) == 1
+    data = r.json()
+    assert data["total"] == 1
+    assert len(data["items"]) == 1
+    assert data["offset"] == 0
+    assert data["limit"] == 20
 
 
 def test_get_customer():
@@ -152,4 +156,61 @@ def test_get_customer_by_document_not_found():
 
 def test_get_customer_by_document_invalid():
     r = client.get("/customers/by-document/123")
+    assert r.status_code == 422
+
+
+def _seed_customers(n: int):
+    for i in range(n):
+        client.post("/customers", json={
+            "name": f"Customer {i}",
+            "email": f"c{i}@bpay.com",
+            "document": f"{10000000000 + i}",
+        })
+
+
+def test_list_customers_default_pagination():
+    _seed_customers(25)
+    r = client.get("/customers")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["items"]) == 20
+    assert data["total"] == 25
+    assert data["offset"] == 0
+    assert data["limit"] == 20
+
+
+def test_list_customers_custom_limit():
+    _seed_customers(10)
+    r = client.get("/customers?limit=5")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["items"]) == 5
+    assert data["total"] == 10
+
+
+def test_list_customers_offset():
+    _seed_customers(5)
+    r = client.get("/customers?offset=2&limit=2")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["items"]) == 2
+    assert data["total"] == 5
+    assert data["offset"] == 2
+
+
+def test_list_customers_total_count():
+    _seed_customers(3)
+    r = client.get("/customers?limit=1")
+    data = r.json()
+    assert len(data["items"]) == 1
+    assert data["total"] == 3
+
+
+def test_list_customers_invalid_limit_zero():
+    r = client.get("/customers?limit=0")
+    assert r.status_code == 422
+
+
+def test_list_customers_invalid_limit_over_100():
+    r = client.get("/customers?limit=101")
     assert r.status_code == 422
