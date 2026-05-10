@@ -80,3 +80,54 @@ def test_delete_customer():
     assert r.status_code == 204
     r = client.get(f"/customers/{cid}")
     assert r.status_code == 404
+
+
+def test_invalid_document_too_short():
+    r = client.post("/customers", json={
+        "name": "Test",
+        "email": "test@bpay.com",
+        "document": "123",
+    })
+    assert r.status_code == 422
+
+
+def test_invalid_document_letters():
+    r = client.post("/customers", json={
+        "name": "Test",
+        "email": "test@bpay.com",
+        "document": "1234567890a",
+    })
+    assert r.status_code == 422
+
+
+def test_valid_cpf():
+    r = client.post("/customers", json={
+        "name": "CPF User",
+        "email": "cpf@bpay.com",
+        "document": "12345678901",
+    })
+    assert r.status_code == 201
+
+
+def test_valid_cnpj():
+    r = client.post("/customers", json={
+        "name": "CNPJ User",
+        "email": "cnpj@bpay.com",
+        "document": "12345678000195",
+    })
+    assert r.status_code == 201
+
+
+def test_duplicate_document():
+    client.post("/customers", json={
+        "name": "Original",
+        "email": "original@bpay.com",
+        "document": "11111111111",
+    })
+    r = client.post("/customers", json={
+        "name": "Duplicate",
+        "email": "dup@bpay.com",
+        "document": "11111111111",
+    })
+    assert r.status_code == 409
+    assert "already exists" in r.json()["detail"]
