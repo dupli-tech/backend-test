@@ -1,0 +1,33 @@
+import uuid
+
+from app.models import Customer, CustomerCreate, CustomerUpdate
+
+_db: dict[str, Customer] = {}
+
+
+def create_customer(data: CustomerCreate) -> Customer:
+    customer = Customer(id=str(uuid.uuid4()), **data.model_dump())
+    _db[customer.id] = customer
+    return customer
+
+
+def get_customer(customer_id: str) -> Customer | None:
+    return _db.get(customer_id)
+
+
+def list_customers() -> list[Customer]:
+    return list(_db.values())
+
+
+def update_customer(customer_id: str, data: CustomerUpdate) -> Customer | None:
+    customer = _db.get(customer_id)
+    if not customer:
+        return None
+    updates = data.model_dump(exclude_unset=True)
+    updated = customer.model_copy(update=updates)
+    _db[customer_id] = updated
+    return updated
+
+
+def delete_customer(customer_id: str) -> bool:
+    return _db.pop(customer_id, None) is not None
