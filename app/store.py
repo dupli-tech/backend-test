@@ -22,8 +22,12 @@ def get_customer(customer_id: str) -> Customer | None:
     return _db.get(customer_id)
 
 
-def list_customers() -> list[Customer]:
-    return list(_db.values())
+def list_customers(
+    offset: int = 0, limit: int = 20
+) -> tuple[list[Customer], int]:
+    all_customers = list(_db.values())
+    total = len(all_customers)
+    return all_customers[offset : offset + limit], total
 
 
 def update_customer(customer_id: str, data: CustomerUpdate) -> Customer | None:

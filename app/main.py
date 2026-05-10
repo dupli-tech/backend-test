@@ -1,6 +1,12 @@
 from fastapi import FastAPI, HTTPException
 
-from app.models import _DOCUMENT_RE, Customer, CustomerCreate, CustomerUpdate
+from app.models import (
+    _DOCUMENT_RE,
+    Customer,
+    CustomerCreate,
+    CustomerUpdate,
+    PaginatedResponse,
+)
 from app.store import (
     DuplicateDocumentError,
     create_customer,
@@ -28,8 +34,13 @@ def create(data: CustomerCreate) -> Customer:
 
 
 @app.get("/customers")
-def list_all() -> list[Customer]:
-    return list_customers()
+def list_all(offset: int = 0, limit: int = 20) -> PaginatedResponse[Customer]:
+    if limit < 1 or limit > 100:
+        raise HTTPException(
+            status_code=422, detail="limit must be between 1 and 100"
+        )
+    items, total = list_customers(offset=offset, limit=limit)
+    return PaginatedResponse(items=items, total=total, offset=offset, limit=limit)
 
 
 @app.get("/customers/{customer_id}")
