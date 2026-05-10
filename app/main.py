@@ -1,3 +1,6 @@
+import time
+from datetime import UTC, datetime
+
 from fastapi import FastAPI, HTTPException
 
 from app.models import (
@@ -19,10 +22,22 @@ from app.store import (
 
 app = FastAPI(title="BPay Backend Test", version="0.1.0")
 
+_start_time = time.time()
+
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/health/details")
+def health_details() -> dict:
+    return {
+        "status": "ok",
+        "version": app.version,
+        "uptime_seconds": round(time.time() - _start_time, 2),
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
 
 
 @app.post("/customers", status_code=201)
