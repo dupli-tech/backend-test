@@ -131,3 +131,25 @@ def test_duplicate_document():
     })
     assert r.status_code == 409
     assert "already exists" in r.json()["detail"]
+
+
+def test_get_customer_by_document():
+    client.post("/customers", json={
+        "name": "Busca Doc",
+        "email": "busca@bpay.com",
+        "document": "22233344455",
+    })
+    r = client.get("/customers/by-document/22233344455")
+    assert r.status_code == 200
+    assert r.json()["name"] == "Busca Doc"
+    assert r.json()["document"] == "22233344455"
+
+
+def test_get_customer_by_document_not_found():
+    r = client.get("/customers/by-document/99999999999")
+    assert r.status_code == 404
+
+
+def test_get_customer_by_document_invalid():
+    r = client.get("/customers/by-document/123")
+    assert r.status_code == 422

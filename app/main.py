@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException
 
-from app.models import Customer, CustomerCreate, CustomerUpdate
+from app.models import _DOCUMENT_RE, Customer, CustomerCreate, CustomerUpdate
 from app.store import (
     DuplicateDocumentError,
     create_customer,
     delete_customer,
     get_customer,
+    get_customer_by_document,
     list_customers,
     update_customer,
 )
@@ -34,6 +35,19 @@ def list_all() -> list[Customer]:
 @app.get("/customers/{customer_id}")
 def get(customer_id: str) -> Customer:
     customer = get_customer(customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return customer
+
+
+@app.get("/customers/by-document/{document}")
+def get_by_document(document: str) -> Customer:
+    if not _DOCUMENT_RE.match(document):
+        raise HTTPException(
+            status_code=422,
+            detail="document must be 11 digits (CPF) or 14 digits (CNPJ)",
+        )
+    customer = get_customer_by_document(document)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     return customer

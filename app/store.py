@@ -36,5 +36,12 @@ def update_customer(customer_id: str, data: CustomerUpdate) -> Customer | None:
     return updated
 
 
+def get_customer_by_document(document: str) -> Customer | None:
+    for customer in _db.values():
+        if customer.document == document:
+            return customer
+    return None
+
+
 def delete_customer(customer_id: str) -> bool:
     return _db.pop(customer_id, None) is not None
