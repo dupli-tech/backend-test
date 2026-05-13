@@ -168,13 +168,19 @@ def list_all(
     offset: int = 0,
     limit: int = 20,
     include_inactive: bool = False,
+    search: str | None = None,
+    email: str | None = None,
 ) -> PaginatedResponse[Customer]:
     if limit < 1 or limit > 100:
         raise HTTPException(
             status_code=422, detail="limit must be between 1 and 100"
         )
     items, total = list_customers(
-        offset=offset, limit=limit, include_inactive=include_inactive
+        offset=offset,
+        limit=limit,
+        include_inactive=include_inactive,
+        search=search,
+        email=email,
     )
     return PaginatedResponse(items=items, total=total, offset=offset, limit=limit)
 

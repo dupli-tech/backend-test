@@ -51,11 +51,18 @@ def list_customers(
     limit: int = 20,
     *,
     include_inactive: bool = False,
+    search: str | None = None,
+    email: str | None = None,
 ) -> tuple[list[Customer], int]:
     if include_inactive:
         filtered = list(_db.values())
     else:
         filtered = [s for s in _db.values() if s.is_active]
+    if search:
+        search_lower = search.lower()
+        filtered = [s for s in filtered if search_lower in s.name.lower()]
+    if email:
+        filtered = [s for s in filtered if s.email == email]
     total = len(filtered)
     page = filtered[offset : offset + limit]
     return [_to_customer(s) for s in page], total
