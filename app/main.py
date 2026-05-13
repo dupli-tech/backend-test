@@ -35,6 +35,7 @@ from app.store import (
     get_customer_by_document,
     get_customer_by_email,
     list_customers,
+    restore_customer,
     update_customer,
 )
 from app.user_store import (
@@ -163,13 +164,18 @@ def create(data: CustomerCreate, _current: AdminOnly) -> Customer:
 
 @app.get("/customers")
 def list_all(
-    _current: AdminOrOperator, offset: int = 0, limit: int = 20
+    _current: AdminOrOperator,
+    offset: int = 0,
+    limit: int = 20,
+    include_inactive: bool = False,
 ) -> PaginatedResponse[Customer]:
     if limit < 1 or limit > 100:
         raise HTTPException(
             status_code=422, detail="limit must be between 1 and 100"
         )
-    items, total = list_customers(offset=offset, limit=limit)
+    items, total = list_customers(
+        offset=offset, limit=limit, include_inactive=include_inactive
+    )
     return PaginatedResponse(items=items, total=total, offset=offset, limit=limit)
 
 
@@ -202,6 +208,16 @@ def update(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     return customer
+
+
+@app.post("/customers/{customer_id}/restore")
+def restore(customer_id: str, _current: AdminOnly) -> Customer:
+    result = restore_customer(customer_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    if result == "already_active":
+        raise HTTPException(status_code=409, detail="Customer is already active")
+    return result
 
 
 @app.delete("/customers/{customer_id}", status_code=204)

@@ -41,6 +41,7 @@ class Customer(BaseModel):
     name: str
     email: str
     document: str
+    is_active: bool = True
 
 
 class CustomerStored(BaseModel):
@@ -49,3 +50,4 @@ class CustomerStored(BaseModel):
     email: str
     document: str
     hashed_password: str
+    is_active: bool = True
