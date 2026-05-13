@@ -10,6 +10,7 @@ from app.auth import (
     decode_token,
     get_current_entity,
     hash_password,
+    require_role,
     verify_password,
 )
 from app.auth_models import (
@@ -48,6 +49,8 @@ app = FastAPI(title="BPay Backend Test", version="0.1.0")
 _start_time = time.time()
 
 CurrentEntity = Annotated[dict, Depends(get_current_entity)]
+AdminOrOperator = Annotated[dict, Depends(require_role("admin", "operator"))]
+AdminOnly = Annotated[dict, Depends(require_role("admin"))]
 
 
 # ── Public ────────────────────────────────────────────────────────────
@@ -89,8 +92,8 @@ def login(data: LoginRequest) -> TokenResponse:
         if not user or not verify_password(data.password, user.hashed_password):
             raise HTTPException(status_code=401, detail="Invalid credentials")
         return TokenResponse(
-            access_token=create_access_token(user.id, "user"),
-            refresh_token=create_refresh_token(user.id, "user"),
+            access_token=create_access_token(user.id, "user", role=user.role),
+            refresh_token=create_refresh_token(user.id, "user", role=user.role),
         )
 
     # entity_type == "customer"
@@ -112,9 +115,10 @@ def refresh(data: RefreshRequest) -> TokenResponse:
         raise HTTPException(status_code=401, detail="Invalid token")
     sub = payload["sub"]
     entity_type = payload["entity_type"]
+    role = payload.get("role")
     return TokenResponse(
-        access_token=create_access_token(sub, entity_type),
-        refresh_token=create_refresh_token(sub, entity_type),
+        access_token=create_access_token(sub, entity_type, role=role),
+        refresh_token=create_refresh_token(sub, entity_type, role=role),
     )
 
 
@@ -137,8 +141,20 @@ def me(current: CurrentEntity) -> dict:
 # ── Customers (protected) ────────────────────────────────────────────
 
 
+@app.get("/customers/me")
+def get_my_customer(current: CurrentEntity) -> Customer:
+    if current["entity_type"] != "customer":
+        raise HTTPException(
+            status_code=403, detail="Only customers can access this endpoint"
+        )
+    customer = get_customer(current["sub"])
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return customer
+
+
 @app.post("/customers", status_code=201)
-def create(data: CustomerCreate, _current: CurrentEntity) -> Customer:
+def create(data: CustomerCreate, _current: AdminOnly) -> Customer:
     try:
         return create_customer(data, hash_password(data.password))
     except DuplicateDocumentError:
@@ -147,7 +163,7 @@ def create(data: CustomerCreate, _current: CurrentEntity) -> Customer:
 
 @app.get("/customers")
 def list_all(
-    _current: CurrentEntity, offset: int = 0, limit: int = 20
+    _current: AdminOrOperator, offset: int = 0, limit: int = 20
 ) -> PaginatedResponse[Customer]:
     if limit < 1 or limit > 100:
         raise HTTPException(
@@ -158,7 +174,7 @@ def list_all(
 
 
 @app.get("/customers/{customer_id}")
-def get(customer_id: str, _current: CurrentEntity) -> Customer:
+def get(customer_id: str, _current: AdminOrOperator) -> Customer:
     customer = get_customer(customer_id)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
@@ -166,7 +182,7 @@ def get(customer_id: str, _current: CurrentEntity) -> Customer:
 
 
 @app.get("/customers/by-document/{document}")
-def get_by_document(document: str, _current: CurrentEntity) -> Customer:
+def get_by_document(document: str, _current: AdminOrOperator) -> Customer:
     if not _DOCUMENT_RE.match(document):
         raise HTTPException(
             status_code=422,
@@ -180,7 +196,7 @@ def get_by_document(document: str, _current: CurrentEntity) -> Customer:
 
 @app.patch("/customers/{customer_id}")
 def update(
-    customer_id: str, data: CustomerUpdate, _current: CurrentEntity
+    customer_id: str, data: CustomerUpdate, _current: AdminOnly
 ) -> Customer:
     customer = update_customer(customer_id, data)
     if not customer:
@@ -189,6 +205,6 @@ def update(
 
 
 @app.delete("/customers/{customer_id}", status_code=204)
-def delete(customer_id: str, _current: CurrentEntity) -> None:
+def delete(customer_id: str, _current: AdminOnly) -> None:
     if not delete_customer(customer_id):
         raise HTTPException(status_code=404, detail="Customer not found")

@@ -1,7 +1,7 @@
 import uuid
 
 from app.auth import hash_password
-from app.auth_models import UserCreate, UserRole, UserStored
+from app.auth_models import UserCreate, UserStored
 
 _user_db: dict[str, UserStored] = {}
 
@@ -19,7 +19,7 @@ def create_user(data: UserCreate) -> UserStored:
         name=data.name,
         email=data.email,
         hashed_password=hash_password(data.password),
-        role=UserRole.operator,
+        role=data.role,
     )
     _user_db[user.id] = user
     return user

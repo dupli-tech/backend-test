@@ -23,7 +23,9 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(sub: str, entity_type: str) -> str:
+def create_access_token(
+    sub: str, entity_type: str, *, role: str | None = None
+) -> str:
     now = datetime.now(UTC)
     expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
@@ -33,10 +35,14 @@ def create_access_token(sub: str, entity_type: str) -> str:
         "iat": now,
         "token_type": "access",
     }
+    if role:
+        payload["role"] = role
     return jwt.encode(payload, JWT_SECRET, algorithm=ALGORITHM)
 
 
-def create_refresh_token(sub: str, entity_type: str) -> str:
+def create_refresh_token(
+    sub: str, entity_type: str, *, role: str | None = None
+) -> str:
     now = datetime.now(UTC)
     expire = now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     payload = {
@@ -46,6 +52,8 @@ def create_refresh_token(sub: str, entity_type: str) -> str:
         "iat": now,
         "token_type": "refresh",
     }
+    if role:
+        payload["role"] = role
     return jwt.encode(payload, JWT_SECRET, algorithm=ALGORITHM)
 
 
@@ -76,4 +84,23 @@ def get_current_entity(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         )
-    return {"sub": sub, "entity_type": entity_type}
+    result = {"sub": sub, "entity_type": entity_type}
+    if entity_type == "user":
+        result["role"] = payload.get("role")
+    return result
+
+
+def require_role(*allowed_roles: str):
+    def dependency(current: dict = Depends(get_current_entity)) -> dict:
+        if current["entity_type"] != "user":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        if current.get("role") not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        return current
+    return dependency
