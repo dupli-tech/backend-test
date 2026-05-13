@@ -42,6 +42,7 @@ class Customer(BaseModel):
     email: str
     document: str
     is_active: bool = True
+    balance: float = 0.0
 
 
 class CustomerStored(BaseModel):
@@ -51,3 +52,4 @@ class CustomerStored(BaseModel):
     document: str
     hashed_password: str
     is_active: bool = True
+    balance: float = 0.0

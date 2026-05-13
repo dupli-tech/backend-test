@@ -93,6 +93,17 @@ def delete_customer(customer_id: str) -> bool:
     return True
 
 
+def deposit_customer(customer_id: str, amount: float) -> Customer | None:
+    stored = _db.get(customer_id)
+    if not stored or not stored.is_active:
+        return None
+    updated = stored.model_copy(
+        update={"balance": stored.balance + amount}
+    )
+    _db[customer_id] = updated
+    return _to_customer(updated)
+
+
 def restore_customer(customer_id: str) -> Customer | None | str:
     stored = _db.get(customer_id)
     if not stored:

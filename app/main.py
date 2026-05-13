@@ -31,12 +31,25 @@ from app.store import (
     DuplicateDocumentError,
     create_customer,
     delete_customer,
+    deposit_customer,
     get_customer,
     get_customer_by_document,
     get_customer_by_email,
     list_customers,
     restore_customer,
     update_customer,
+)
+from app.transaction_models import (
+    DepositRequest,
+    Transaction,
+    TransactionCreate,
+)
+from app.transaction_store import (
+    InsufficientBalanceError,
+    SelfTransferError,
+    create_transaction,
+    get_transaction,
+    list_transactions,
 )
 from app.user_store import (
     DuplicateEmailError,
@@ -226,7 +239,64 @@ def restore(customer_id: str, _current: AdminOnly) -> Customer:
     return result
 
 
+@app.post("/customers/{customer_id}/deposit")
+def deposit(
+    customer_id: str, data: DepositRequest, _current: CurrentEntity
+) -> Customer:
+    if data.amount <= 0:
+        raise HTTPException(status_code=422, detail="Amount must be positive")
+    customer = deposit_customer(customer_id, data.amount)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return customer
+
+
 @app.delete("/customers/{customer_id}", status_code=204)
 def delete(customer_id: str, _current: AdminOnly) -> None:
     if not delete_customer(customer_id):
         raise HTTPException(status_code=404, detail="Customer not found")
+
+
+# ── Transactions (protected) ─────────────────────────────────────────
+
+
+@app.post("/transactions", status_code=201)
+def create_tx(
+    data: TransactionCreate, _current: CurrentEntity
+) -> Transaction:
+    if data.amount <= 0:
+        raise HTTPException(status_code=422, detail="Amount must be positive")
+    try:
+        return create_transaction(
+            data.from_customer_id, data.to_customer_id, data.amount
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except SelfTransferError:
+        raise HTTPException(
+            status_code=422, detail="Cannot transfer to yourself"
+        )
+    except InsufficientBalanceError:
+        raise HTTPException(
+            status_code=422, detail="Insufficient balance"
+        )
+
+
+@app.get("/transactions")
+def list_all_tx(
+    _current: CurrentEntity, offset: int = 0, limit: int = 20
+) -> PaginatedResponse[Transaction]:
+    items, total = list_transactions(offset=offset, limit=limit)
+    return PaginatedResponse(
+        items=items, total=total, offset=offset, limit=limit
+    )
+
+
+@app.get("/transactions/{transaction_id}")
+def get_tx(transaction_id: str, _current: CurrentEntity) -> Transaction:
+    tx = get_transaction(transaction_id)
+    if not tx:
+        raise HTTPException(
+            status_code=404, detail="Transaction not found"
+        )
+    return tx
