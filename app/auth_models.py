@@ -29,6 +29,7 @@ class UserCreate(BaseModel):
     name: str
     email: str
     password: str
+    role: UserRole = UserRole.operator
 
 
 class UserResponse(BaseModel):

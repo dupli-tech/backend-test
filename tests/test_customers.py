@@ -10,7 +10,12 @@ client = TestClient(app)
 def _get_auth_header() -> dict:
     client.post(
         "/auth/register",
-        json={"name": "Test Admin", "email": "test-admin@bpay.com", "password": "pwd"},
+        json={
+            "name": "Test Admin",
+            "email": "test-admin@bpay.com",
+            "password": "pwd",
+            "role": "admin",
+        },
     )
     r = client.post(
         "/auth/login",

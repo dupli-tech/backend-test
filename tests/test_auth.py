@@ -21,10 +21,11 @@ def _register_user(
     name: str = "Admin",
     email: str = "admin@bpay.com",
     password: str = "secret123",
+    role: str = "admin",
 ) -> dict:
     r = client.post(
         "/auth/register",
-        json={"name": name, "email": email, "password": password},
+        json={"name": name, "email": email, "password": password, "role": role},
     )
     return r.json()
 
@@ -233,7 +234,7 @@ def test_me_user():
     assert r.status_code == 200
     data = r.json()
     assert data["email"] == "admin@bpay.com"
-    assert data["role"] == "operator"
+    assert data["role"] == "admin"
     assert "hashed_password" not in data
 
 
