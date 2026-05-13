@@ -4,6 +4,8 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
 
+from app.audit_models import AuditEntry
+from app.audit_store import list_audit, record_audit
 from app.auth import (
     create_access_token,
     create_refresh_token,
@@ -31,11 +33,25 @@ from app.store import (
     DuplicateDocumentError,
     create_customer,
     delete_customer,
+    deposit_customer,
     get_customer,
     get_customer_by_document,
     get_customer_by_email,
     list_customers,
+    restore_customer,
     update_customer,
+)
+from app.transaction_models import (
+    DepositRequest,
+    Transaction,
+    TransactionCreate,
+)
+from app.transaction_store import (
+    InsufficientBalanceError,
+    SelfTransferError,
+    create_transaction,
+    get_transaction,
+    list_transactions,
 )
 from app.user_store import (
     DuplicateEmailError,
@@ -93,7 +109,9 @@ def login(data: LoginRequest) -> TokenResponse:
             raise HTTPException(status_code=401, detail="Invalid credentials")
         return TokenResponse(
             access_token=create_access_token(user.id, "user", role=user.role),
-            refresh_token=create_refresh_token(user.id, "user", role=user.role),
+            refresh_token=create_refresh_token(
+                user.id, "user", role=user.role
+            ),
         )
 
     # entity_type == "customer"
@@ -145,7 +163,8 @@ def me(current: CurrentEntity) -> dict:
 def get_my_customer(current: CurrentEntity) -> Customer:
     if current["entity_type"] != "customer":
         raise HTTPException(
-            status_code=403, detail="Only customers can access this endpoint"
+            status_code=403,
+            detail="Only customers can access this endpoint",
         )
     customer = get_customer(current["sub"])
     if not customer:
@@ -156,21 +175,39 @@ def get_my_customer(current: CurrentEntity) -> Customer:
 @app.post("/customers", status_code=201)
 def create(data: CustomerCreate, _current: AdminOnly) -> Customer:
     try:
-        return create_customer(data, hash_password(data.password))
+        customer = create_customer(data, hash_password(data.password))
     except DuplicateDocumentError:
         raise HTTPException(status_code=409, detail="Document already exists")
+    record_audit(
+        "create", "customer", customer.id,
+        _current["sub"], _current["entity_type"],
+    )
+    return customer
 
 
 @app.get("/customers")
 def list_all(
-    _current: AdminOrOperator, offset: int = 0, limit: int = 20
+    _current: AdminOrOperator,
+    offset: int = 0,
+    limit: int = 20,
+    include_inactive: bool = False,
+    search: str | None = None,
+    email: str | None = None,
 ) -> PaginatedResponse[Customer]:
     if limit < 1 or limit > 100:
         raise HTTPException(
             status_code=422, detail="limit must be between 1 and 100"
         )
-    items, total = list_customers(offset=offset, limit=limit)
-    return PaginatedResponse(items=items, total=total, offset=offset, limit=limit)
+    items, total = list_customers(
+        offset=offset,
+        limit=limit,
+        include_inactive=include_inactive,
+        search=search,
+        email=email,
+    )
+    return PaginatedResponse(
+        items=items, total=total, offset=offset, limit=limit
+    )
 
 
 @app.get("/customers/{customer_id}")
@@ -198,9 +235,55 @@ def get_by_document(document: str, _current: AdminOrOperator) -> Customer:
 def update(
     customer_id: str, data: CustomerUpdate, _current: AdminOnly
 ) -> Customer:
+    old = get_customer(customer_id)
     customer = update_customer(customer_id, data)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
+    changes = data.model_dump(exclude_unset=True)
+    diff = {}
+    if old:
+        for key, new_val in changes.items():
+            old_val = getattr(old, key, None)
+            if old_val != new_val:
+                diff[key] = {"old": old_val, "new": new_val}
+    record_audit(
+        "update", "customer", customer_id,
+        _current["sub"], _current["entity_type"],
+        details=diff if diff else None,
+    )
+    return customer
+
+
+@app.post("/customers/{customer_id}/restore")
+def restore(customer_id: str, _current: AdminOnly) -> Customer:
+    result = restore_customer(customer_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    if result == "already_active":
+        raise HTTPException(
+            status_code=409, detail="Customer is already active"
+        )
+    record_audit(
+        "restore", "customer", customer_id,
+        _current["sub"], _current["entity_type"],
+    )
+    return result
+
+
+@app.post("/customers/{customer_id}/deposit")
+def deposit(
+    customer_id: str, data: DepositRequest, _current: CurrentEntity
+) -> Customer:
+    if data.amount <= 0:
+        raise HTTPException(status_code=422, detail="Amount must be positive")
+    customer = deposit_customer(customer_id, data.amount)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    record_audit(
+        "deposit", "customer", customer_id,
+        _current["sub"], _current["entity_type"],
+        details={"amount": data.amount},
+    )
     return customer
 
 
@@ -208,3 +291,86 @@ def update(
 def delete(customer_id: str, _current: AdminOnly) -> None:
     if not delete_customer(customer_id):
         raise HTTPException(status_code=404, detail="Customer not found")
+    record_audit(
+        "delete", "customer", customer_id,
+        _current["sub"], _current["entity_type"],
+    )
+
+
+# ── Transactions (protected) ─────────────────────────────────────────
+
+
+@app.post("/transactions", status_code=201)
+def create_tx(
+    data: TransactionCreate, _current: CurrentEntity
+) -> Transaction:
+    if data.amount <= 0:
+        raise HTTPException(status_code=422, detail="Amount must be positive")
+    try:
+        tx = create_transaction(
+            data.from_customer_id, data.to_customer_id, data.amount
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except SelfTransferError:
+        raise HTTPException(
+            status_code=422, detail="Cannot transfer to yourself"
+        )
+    except InsufficientBalanceError:
+        raise HTTPException(
+            status_code=422, detail="Insufficient balance"
+        )
+    record_audit(
+        "transfer", "transaction", tx.id,
+        _current["sub"], _current["entity_type"],
+        details={
+            "from": data.from_customer_id,
+            "to": data.to_customer_id,
+            "amount": data.amount,
+        },
+    )
+    return tx
+
+
+@app.get("/transactions")
+def list_all_tx(
+    _current: CurrentEntity, offset: int = 0, limit: int = 20
+) -> PaginatedResponse[Transaction]:
+    items, total = list_transactions(offset=offset, limit=limit)
+    return PaginatedResponse(
+        items=items, total=total, offset=offset, limit=limit
+    )
+
+
+@app.get("/transactions/{transaction_id}")
+def get_tx(transaction_id: str, _current: CurrentEntity) -> Transaction:
+    tx = get_transaction(transaction_id)
+    if not tx:
+        raise HTTPException(
+            status_code=404, detail="Transaction not found"
+        )
+    return tx
+
+
+# ── Audit Log (admin only) ───────────────────────────────────────────
+
+
+@app.get("/audit-log")
+def get_audit_log(
+    _current: AdminOnly,
+    offset: int = 0,
+    limit: int = 20,
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+    actor_id: str | None = None,
+) -> PaginatedResponse[AuditEntry]:
+    items, total = list_audit(
+        offset=offset,
+        limit=limit,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor_id=actor_id,
+    )
+    return PaginatedResponse(
+        items=items, total=total, offset=offset, limit=limit
+    )

@@ -30,7 +30,9 @@ def create_customer(data: CustomerCreate, hashed_password: str) -> Customer:
 
 def get_customer(customer_id: str) -> Customer | None:
     stored = _db.get(customer_id)
-    return _to_customer(stored) if stored else None
+    if not stored or not stored.is_active:
+        return None
+    return _to_customer(stored)
 
 
 def get_customer_stored(customer_id: str) -> CustomerStored | None:
@@ -44,12 +46,36 @@ def get_customer_by_email(email: str) -> CustomerStored | None:
     return None
 
 
+def deposit_customer(customer_id: str, amount: float) -> Customer | None:
+    stored = _db.get(customer_id)
+    if not stored or not stored.is_active:
+        return None
+    updated = stored.model_copy(
+        update={"balance": stored.balance + amount}
+    )
+    _db[customer_id] = updated
+    return _to_customer(updated)
+
+
 def list_customers(
-    offset: int = 0, limit: int = 20
+    offset: int = 0,
+    limit: int = 20,
+    *,
+    include_inactive: bool = False,
+    search: str | None = None,
+    email: str | None = None,
 ) -> tuple[list[Customer], int]:
-    all_stored = list(_db.values())
-    total = len(all_stored)
-    page = all_stored[offset : offset + limit]
+    if include_inactive:
+        filtered = list(_db.values())
+    else:
+        filtered = [s for s in _db.values() if s.is_active]
+    if search:
+        search_lower = search.lower()
+        filtered = [s for s in filtered if search_lower in s.name.lower()]
+    if email:
+        filtered = [s for s in filtered if s.email == email]
+    total = len(filtered)
+    page = filtered[offset : offset + limit]
     return [_to_customer(s) for s in page], total
 
 
@@ -71,4 +97,19 @@ def get_customer_by_document(document: str) -> Customer | None:
 
 
 def delete_customer(customer_id: str) -> bool:
-    return _db.pop(customer_id, None) is not None
+    stored = _db.get(customer_id)
+    if not stored or not stored.is_active:
+        return False
+    _db[customer_id] = stored.model_copy(update={"is_active": False})
+    return True
+
+
+def restore_customer(customer_id: str) -> Customer | None | str:
+    stored = _db.get(customer_id)
+    if not stored:
+        return None
+    if stored.is_active:
+        return "already_active"
+    restored = stored.model_copy(update={"is_active": True})
+    _db[customer_id] = restored
+    return _to_customer(restored)
