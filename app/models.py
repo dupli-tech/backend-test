@@ -19,6 +19,7 @@ class CustomerCreate(BaseModel):
     name: str
     email: str
     document: str  # CPF (11 dígitos) ou CNPJ (14 dígitos)
+    password: str
 
     @field_validator("document")
     @classmethod
@@ -40,3 +41,11 @@ class Customer(BaseModel):
     name: str
     email: str
     document: str
+
+
+class CustomerStored(BaseModel):
+    id: str
+    name: str
+    email: str
+    document: str
+    hashed_password: str
