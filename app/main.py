@@ -4,6 +4,8 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
 
+from app.audit_models import AuditEntry
+from app.audit_store import list_audit, record_audit
 from app.auth import (
     create_access_token,
     create_refresh_token,
@@ -170,9 +172,14 @@ def get_my_customer(current: CurrentEntity) -> Customer:
 @app.post("/customers", status_code=201)
 def create(data: CustomerCreate, _current: AdminOnly) -> Customer:
     try:
-        return create_customer(data, hash_password(data.password))
+        customer = create_customer(data, hash_password(data.password))
     except DuplicateDocumentError:
         raise HTTPException(status_code=409, detail="Document already exists")
+    record_audit(
+        "create", "customer", customer.id,
+        _current["sub"], _current["entity_type"],
+    )
+    return customer
 
 
 @app.get("/customers")
@@ -223,9 +230,22 @@ def get_by_document(document: str, _current: AdminOrOperator) -> Customer:
 def update(
     customer_id: str, data: CustomerUpdate, _current: AdminOnly
 ) -> Customer:
+    old = get_customer(customer_id)
     customer = update_customer(customer_id, data)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
+    changes = data.model_dump(exclude_unset=True)
+    diff = {}
+    if old:
+        for key, new_val in changes.items():
+            old_val = getattr(old, key, None)
+            if old_val != new_val:
+                diff[key] = {"old": old_val, "new": new_val}
+    record_audit(
+        "update", "customer", customer_id,
+        _current["sub"], _current["entity_type"],
+        details=diff if diff else None,
+    )
     return customer
 
 
@@ -235,7 +255,13 @@ def restore(customer_id: str, _current: AdminOnly) -> Customer:
     if result is None:
         raise HTTPException(status_code=404, detail="Customer not found")
     if result == "already_active":
-        raise HTTPException(status_code=409, detail="Customer is already active")
+        raise HTTPException(
+            status_code=409, detail="Customer is already active"
+        )
+    record_audit(
+        "restore", "customer", customer_id,
+        _current["sub"], _current["entity_type"],
+    )
     return result
 
 
@@ -248,6 +274,11 @@ def deposit(
     customer = deposit_customer(customer_id, data.amount)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
+    record_audit(
+        "deposit", "customer", customer_id,
+        _current["sub"], _current["entity_type"],
+        details={"amount": data.amount},
+    )
     return customer
 
 
@@ -255,6 +286,10 @@ def deposit(
 def delete(customer_id: str, _current: AdminOnly) -> None:
     if not delete_customer(customer_id):
         raise HTTPException(status_code=404, detail="Customer not found")
+    record_audit(
+        "delete", "customer", customer_id,
+        _current["sub"], _current["entity_type"],
+    )
 
 
 # ── Transactions (protected) ─────────────────────────────────────────
@@ -267,7 +302,7 @@ def create_tx(
     if data.amount <= 0:
         raise HTTPException(status_code=422, detail="Amount must be positive")
     try:
-        return create_transaction(
+        tx = create_transaction(
             data.from_customer_id, data.to_customer_id, data.amount
         )
     except KeyError as e:
@@ -280,6 +315,16 @@ def create_tx(
         raise HTTPException(
             status_code=422, detail="Insufficient balance"
         )
+    record_audit(
+        "transfer", "transaction", tx.id,
+        _current["sub"], _current["entity_type"],
+        details={
+            "from": data.from_customer_id,
+            "to": data.to_customer_id,
+            "amount": data.amount,
+        },
+    )
+    return tx
 
 
 @app.get("/transactions")
@@ -300,3 +345,27 @@ def get_tx(transaction_id: str, _current: CurrentEntity) -> Transaction:
             status_code=404, detail="Transaction not found"
         )
     return tx
+
+
+# ── Audit Log (admin only) ───────────────────────────────────────────
+
+
+@app.get("/audit-log")
+def get_audit_log(
+    _current: AdminOnly,
+    offset: int = 0,
+    limit: int = 20,
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+    actor_id: str | None = None,
+) -> PaginatedResponse[AuditEntry]:
+    items, total = list_audit(
+        offset=offset,
+        limit=limit,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor_id=actor_id,
+    )
+    return PaginatedResponse(
+        items=items, total=total, offset=offset, limit=limit
+    )
