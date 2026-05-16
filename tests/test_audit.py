@@ -67,6 +67,7 @@ def _create_customer(
             "name": name,
             "email": f"{name.lower()}@bpay.com",
             "document": doc,
+            "phone": f"+55119{doc[-8:]}",
             "password": "pwd",
         },
         headers=h,

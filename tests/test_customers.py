@@ -45,6 +45,7 @@ def test_create_customer():
         "name": "João Silva",
         "email": "joao@bpay.com",
         "document": "12345678900",
+        "phone": "+5511912345678",
         "password": "cust-pwd",
     }, headers=h)
     assert r.status_code == 201
@@ -60,6 +61,7 @@ def test_list_customers():
         "name": "Maria",
         "email": "maria@bpay.com",
         "document": "98765432100",
+        "phone": "+5511998765432",
         "password": "pwd",
     }, headers=h)
     r = client.get("/customers", headers=h)
@@ -77,6 +79,7 @@ def test_get_customer():
         "name": "Pedro",
         "email": "pedro@bpay.com",
         "document": "11122233344",
+        "phone": "+5511911122233",
         "password": "pwd",
     }, headers=h)
     cid = create.json()["id"]
@@ -97,6 +100,7 @@ def test_update_customer():
         "name": "Ana",
         "email": "ana@bpay.com",
         "document": "55566677788",
+        "phone": "+5511955566677",
         "password": "pwd",
     }, headers=h)
     cid = create.json()["id"]
@@ -112,6 +116,7 @@ def test_delete_customer():
         "name": "Carlos",
         "email": "carlos@bpay.com",
         "document": "99988877766",
+        "phone": "+5511999888777",
         "password": "pwd",
     }, headers=h)
     cid = create.json()["id"]
@@ -127,6 +132,7 @@ def test_invalid_document_too_short():
         "name": "Test",
         "email": "test@bpay.com",
         "document": "123",
+        "phone": "+5511900000001",
         "password": "pwd",
     }, headers=h)
     assert r.status_code == 422
@@ -138,6 +144,7 @@ def test_invalid_document_letters():
         "name": "Test",
         "email": "test@bpay.com",
         "document": "1234567890a",
+        "phone": "+5511900000002",
         "password": "pwd",
     }, headers=h)
     assert r.status_code == 422
@@ -149,6 +156,7 @@ def test_valid_cpf():
         "name": "CPF User",
         "email": "cpf@bpay.com",
         "document": "12345678901",
+        "phone": "+5511900000003",
         "password": "pwd",
     }, headers=h)
     assert r.status_code == 201
@@ -160,6 +168,7 @@ def test_valid_cnpj():
         "name": "CNPJ User",
         "email": "cnpj@bpay.com",
         "document": "12345678000195",
+        "phone": "+5511900000004",
         "password": "pwd",
     }, headers=h)
     assert r.status_code == 201
@@ -171,12 +180,14 @@ def test_duplicate_document():
         "name": "Original",
         "email": "original@bpay.com",
         "document": "11111111111",
+        "phone": "+5511900000005",
         "password": "pwd",
     }, headers=h)
     r = client.post("/customers", json={
         "name": "Duplicate",
         "email": "dup@bpay.com",
         "document": "11111111111",
+        "phone": "+5511900000006",
         "password": "pwd",
     }, headers=h)
     assert r.status_code == 409
@@ -189,6 +200,7 @@ def test_get_customer_by_document():
         "name": "Busca Doc",
         "email": "busca@bpay.com",
         "document": "22233344455",
+        "phone": "+5511900000007",
         "password": "pwd",
     }, headers=h)
     r = client.get("/customers/by-document/22233344455", headers=h)
@@ -215,6 +227,7 @@ def _seed_customers(n: int, headers: dict):
             "name": f"Customer {i}",
             "email": f"c{i}@bpay.com",
             "document": f"{10000000000 + i}",
+            "phone": f"+55119{10000000 + i:08d}",
             "password": "pwd",
         }, headers=headers)
 

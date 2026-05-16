@@ -45,6 +45,7 @@ def _create_customer_payload(**overrides) -> dict:
         "name": "João",
         "email": "joao@bpay.com",
         "document": "12345678900",
+        "phone": "+5511999000001",
         "password": "cust-pass",
     }
     base.update(overrides)
