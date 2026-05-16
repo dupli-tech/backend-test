@@ -9,6 +9,10 @@ class DuplicateDocumentError(Exception):
     pass
 
 
+class DuplicatePhoneError(Exception):
+    pass
+
+
 def _to_customer(stored: CustomerStored) -> Customer:
     return Customer(**stored.model_dump(exclude={"hashed_password"}))
 
@@ -17,11 +21,14 @@ def create_customer(data: CustomerCreate, hashed_password: str) -> Customer:
     for existing in _db.values():
         if existing.document == data.document:
             raise DuplicateDocumentError(data.document)
+        if existing.phone == data.phone:
+            raise DuplicatePhoneError(data.phone)
     stored = CustomerStored(
         id=str(uuid.uuid4()),
         name=data.name,
         email=data.email,
         document=data.document,
+        phone=data.phone,
         hashed_password=hashed_password,
     )
     _db[stored.id] = stored
@@ -43,6 +50,20 @@ def get_customer_by_email(email: str) -> CustomerStored | None:
     for stored in _db.values():
         if stored.email == email:
             return stored
+    return None
+
+
+def get_customer_by_phone(phone: str) -> CustomerStored | None:
+    for stored in _db.values():
+        if stored.phone == phone:
+            return stored
+    return None
+
+
+def get_customer_by_phone_public(phone: str) -> Customer | None:
+    for stored in _db.values():
+        if stored.phone == phone:
+            return _to_customer(stored)
     return None
 
 

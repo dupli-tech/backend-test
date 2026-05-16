@@ -40,6 +40,7 @@ def _create_customer(h: dict, doc: str = "12345678900") -> str:
             "name": "Test",
             "email": f"test-{doc}@bpay.com",
             "document": doc,
+            "phone": f"+55119{doc[-8:]}",
             "password": "pwd",
         },
         headers=h,

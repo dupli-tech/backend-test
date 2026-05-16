@@ -24,6 +24,7 @@ from app.auth_models import (
 )
 from app.models import (
     _DOCUMENT_RE,
+    _PHONE_BR_RE,
     Customer,
     CustomerCreate,
     CustomerUpdate,
@@ -31,12 +32,15 @@ from app.models import (
 )
 from app.store import (
     DuplicateDocumentError,
+    DuplicatePhoneError,
     create_customer,
     delete_customer,
     deposit_customer,
     get_customer,
     get_customer_by_document,
     get_customer_by_email,
+    get_customer_by_phone,
+    get_customer_by_phone_public,
     list_customers,
     restore_customer,
     update_customer,
@@ -115,7 +119,10 @@ def login(data: LoginRequest) -> TokenResponse:
         )
 
     # entity_type == "customer"
-    customer = get_customer_by_email(data.email)
+    if data.phone:
+        customer = get_customer_by_phone(data.phone)
+    else:
+        customer = get_customer_by_email(data.email)
     if not customer or not verify_password(
         data.password, customer.hashed_password
     ):
@@ -178,6 +185,8 @@ def create(data: CustomerCreate, _current: AdminOnly) -> Customer:
         customer = create_customer(data, hash_password(data.password))
     except DuplicateDocumentError:
         raise HTTPException(status_code=409, detail="Document already exists")
+    except DuplicatePhoneError:
+        raise HTTPException(status_code=409, detail="Phone already exists")
     record_audit(
         "create", "customer", customer.id,
         _current["sub"], _current["entity_type"],
@@ -226,6 +235,19 @@ def get_by_document(document: str, _current: AdminOrOperator) -> Customer:
             detail="document must be 11 digits (CPF) or 14 digits (CNPJ)",
         )
     customer = get_customer_by_document(document)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return customer
+
+
+@app.get("/customers/by-phone/{phone}")
+def get_by_phone(phone: str, _current: AdminOrOperator) -> Customer:
+    if not _PHONE_BR_RE.match(phone):
+        raise HTTPException(
+            status_code=422,
+            detail="phone must be Brazilian E.164 format: +55 + DDD + 9 + 8 digits",
+        )
+    customer = get_customer_by_phone_public(phone)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     return customer

@@ -1,7 +1,7 @@
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class UserRole(StrEnum):
@@ -10,9 +10,18 @@ class UserRole(StrEnum):
 
 
 class LoginRequest(BaseModel):
-    email: str
+    email: str | None = None
+    phone: str | None = None
     password: str
     entity_type: Literal["user", "customer"]
+
+    @model_validator(mode="after")
+    def check_email_or_phone(self) -> Self:
+        if self.email and self.phone:
+            raise ValueError("Provide either email or phone, not both")
+        if not self.email and not self.phone:
+            raise ValueError("Either email or phone is required")
+        return self
 
 
 class RefreshRequest(BaseModel):

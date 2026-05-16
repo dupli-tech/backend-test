@@ -34,11 +34,11 @@ def _admin_header() -> dict:
 
 
 def _seed(h: dict):
-    for name, email, doc in [
-        ("João Silva", "joao@bpay.com", "11111111111"),
-        ("Maria Silva", "maria@bpay.com", "22222222222"),
-        ("Pedro Santos", "pedro@bpay.com", "33333333333"),
-        ("Ana Oliveira", "ana@bpay.com", "44444444444"),
+    for name, email, doc, phone in [
+        ("João Silva", "joao@bpay.com", "11111111111", "+5511911111111"),
+        ("Maria Silva", "maria@bpay.com", "22222222222", "+5511922222222"),
+        ("Pedro Santos", "pedro@bpay.com", "33333333333", "+5511933333333"),
+        ("Ana Oliveira", "ana@bpay.com", "44444444444", "+5511944444444"),
     ]:
         client.post(
             "/customers",
@@ -46,6 +46,7 @@ def _seed(h: dict):
                 "name": name,
                 "email": email,
                 "document": doc,
+                "phone": phone,
                 "password": "pwd",
             },
             headers=h,
